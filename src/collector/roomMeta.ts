@@ -32,10 +32,34 @@ export function parseRoomMeta(html: string): RoomMeta | null {
 }
 
 /**
- * 从直播间 HTML 解析开播状态（roomStore.roomInfo.room.status）：
- * 2=直播中，4=已结束；取不到返回 null。
+ * 从直播间 HTML 解析开播状态（roomStore.roomInfo.room.status）。
+ *
+ * 已知状态（均已实测确认）：
+ *   2 = 直播中
+ *   4 = 已结束
+ *
+ * 其它取值（1、3、5…）的含义尚未验证，可能对应预告 / 暂停 / 审核 / 回放等场景。
+ * 当前调用方统一采用白名单策略：「非 2 即不可采集」
+ * （见 lightweightSession.resolveRoomId 与 LiveSession.waitForLive）。
+ *
+ * 若未来发现某个非 2 状态实际仍可采集，应改为黑名单策略：
+ * 只把明确不可采集的状态（至少 4）视为 closed，其余放行，
+ * 再由 waitForLive / 弹幕帧判断是否真正连通。调整时需同步修改两处调用方。
+ *
  * 该字段在初始 HTML 的 self.__pace_f 序列化数据里，以 \"status\":N 反斜杠转义形式存在，
- * 因此需要先还原 \" 与 &quot; 两种转义再匹配。
+ * 因此需要先还原 \" 与 &quot; 两种转义再匹配。取不到时返回 null（调用方放行）。
+ *
+ * 匹配方式与已知脆弱点：
+ *   1. 严格正则假设字段顺序为 "roomStore" → "roomInfo" → "room" → "id_str" → "status"，
+ *      即 status 紧跟在 id_str 之后。抖音前端若调整 JSON 字段顺序或插入新字段，
+ *      严格匹配会失配。
+ *   2. 兜底正则 /"room":\{"id_str":"[^"]*","status":(\d+)/ 更宽松，但页面中可能存在
+ *      多个 "room" 对象（推荐流 / 关联房间等），理论上可能匹配到错误对象。
+ *
+ * 解析失败（返回 null）时，调用方会跳过开播校验直接继续连接，
+ * 而已下播房间的 wss 仍可能建立并推送帧，因此可能重新出现
+ * 「已结束房间被误报为直播中」。若该问题复现，应优先检查抖音页面结构 / 字段顺序
+ * 是否变化，并同步更新本函数及两处调用方。
  */
 export function parseRoomStatus(html: string): number | null {
   const clean = html.replace(/\\"/g, '"').replace(/&quot;/g, '"');

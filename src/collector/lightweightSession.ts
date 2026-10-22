@@ -246,6 +246,7 @@ export class LightweightSession {
       this.liveResolve = resolve;
       this.liveTimeout = setTimeout(() => {
         this.liveResolve = null;
+        this.liveTimeout = null;
         resolve(false);
       }, timeoutMs);
     });
@@ -253,8 +254,17 @@ export class LightweightSession {
 
   async stop(): Promise<void> {
     this.stopped = true;
-    if (this.hbTimer) clearInterval(this.hbTimer);
-    if (this.liveTimeout) clearTimeout(this.liveTimeout);
+    if (this.hbTimer) {
+      clearInterval(this.hbTimer);
+      this.hbTimer = null;
+    }
+    // 结束挂起的 waitForLive，避免 Promise 永久悬挂
+    this.liveResolve?.(false);
+    this.liveResolve = null;
+    if (this.liveTimeout) {
+      clearTimeout(this.liveTimeout);
+      this.liveTimeout = null;
+    }
     if (this.ws) {
       try {
         this.ws.terminate();
@@ -263,7 +273,7 @@ export class LightweightSession {
       }
       this.ws = null;
     }
-    this.status = 'connecting';
+    this.status = 'closed';
   }
 
   // ---------------------------------------------------------------- 内部链路
@@ -274,6 +284,11 @@ export class LightweightSession {
     this.errorMsg = err.message;
     this.opts.onError?.(err);
     this.liveResolve?.(false);
+    this.liveResolve = null;
+    if (this.liveTimeout) {
+      clearTimeout(this.liveTimeout);
+      this.liveTimeout = null;
+    }
   }
 
   /** 连接前确保 cookie 就绪（独立 cookie 直接可用，共享 cookie 走 ensureSharedCookies） */
@@ -295,6 +310,8 @@ export class LightweightSession {
         const m = html.match(/roomId\\?"\s*[:=]\s*\\?"(\d+)\\?"/) || html.match(/"roomId"\s*:\s*"?(\d+)"?/);
         if (m) {
           this.meta = parseRoomMeta(html);
+          // 已知 2=直播中、4=已结束；其它状态含义未验证，先按「不可采集」处理。
+          // 详见 parseRoomStatus 的注释；若未来发现误判，改为仅拒绝明确未开播的值。
           const st = parseRoomStatus(html);
           if (st !== null && st !== 2) {
             this.roomClosed = true;
@@ -410,7 +427,10 @@ export class LightweightSession {
           this.status = 'live';
           this.liveResolve?.(true);
           this.liveResolve = null;
-          if (this.liveTimeout) clearTimeout(this.liveTimeout);
+          if (this.liveTimeout) {
+            clearTimeout(this.liveTimeout);
+            this.liveTimeout = null;
+          }
         }
       }
     } catch {

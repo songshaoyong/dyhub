@@ -90,7 +90,9 @@ export class LiveSession {
 
   /** 等待直播间进入可采集状态：先校验开播状态，再等 wss 建立（最多 timeoutMs） */
   async waitForLive(timeoutMs = 15000): Promise<boolean> {
-    // 1) 先判断房间是否在开播（浏览器内核从页面 HTML 读 roomStore.roomInfo.room.status）
+    // 1) 先判断房间是否在开播（从页面 HTML 读 roomStore.roomInfo.room.status）
+    //    已知 2=直播中、4=已结束；其它状态含义未验证，先按「不可采集」处理。
+    //    详见 parseRoomStatus 的注释；若未来发现误判，改为仅拒绝明确未开播的值。
     const roomStatus = await this.getRoomStatus();
     if (roomStatus != null && roomStatus !== 2) {
       await this.stop(); // status='closed' + 关闭页面，避免 wss 帧再把状态翻成 live
