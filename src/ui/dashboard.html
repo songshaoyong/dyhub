@@ -43,7 +43,7 @@
   button.danger { background: #f5d0cc; color: #a33; }
   button.ghost { background: #eee; color: var(--text); }
   .room-list { display: flex; flex-direction: column; gap: 8px; }
-  .room-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; }
+  .room-item { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
   .room-item.selectable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
   .room-item.selectable:hover { border-color: var(--accent-dark); background: #f8fbfd; }
   .room-item.active { border-color: var(--accent-dark); background: #eef6fb; box-shadow: 0 0 0 1px var(--accent-dark); }
@@ -58,13 +58,20 @@
   .st.stopped { background: #e8e8ee; color: #6b6b78; }
   .st.closed { background: #f3dada; color: #a33; }
   .st.error { background: #f3dada; color: #a33; }
-  .card-btn { padding: 3px 10px; border: none; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 500; background: var(--accent); color: #123; }
+  .r-session { display: flex; gap: 6px; align-items: center; width: 100%; }
+  .session-select { flex: 1 1 auto; min-width: 0; font-size: 12px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--text); }
+  .session-start { flex: 0 0 auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .r-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+  .card-btn { padding: 3px 10px; border: none; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 500; background: var(--accent); color: #123; white-space: nowrap; }
   .card-btn:hover { filter: brightness(0.94); }
   .card-btn.danger { background: #f5d0cc; color: #a33; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(18, 51, 64, 0.25); border-top-color: #123; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -2px; margin-right: 6px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .btn-loading { cursor: wait !important; }
+  .room-item .r-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .room-item .r-body { min-width: 0; flex: 1; }
+  .room-item .r-top .st { flex: 0 0 auto; margin-top: 2px; }
   .room-item .r-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
   .room-item .r-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #eee; flex: 0 0 auto; }
   .room-item .r-avatar-fb { display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; }
@@ -72,13 +79,34 @@
   .room-item .r-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .room-item .r-title { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
   .room-item .r-foot { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-top: 2px; }
-  .room-item .r-foot .rid { font-size: 11px; font-weight: 400; color: #6b6b78; font-family: 'SF Mono', Menlo, monospace; }
+  .room-item .r-foot .rid { font-size: 11px; font-weight: 400; color: #6b6b78; font-family: 'SF Mono', Menlo, monospace; word-break: normal; white-space: nowrap; }
+  .r-tally { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--muted); line-height: 1.4; }
+  .r-tally b { color: var(--text); font-weight: 600; }
   .filters { display: flex; flex-wrap: wrap; gap: 6px; }
   .filters label { font-size: 12px; display: flex; align-items: center; gap: 4px; background: #f4f4f2; border-radius: 20px; padding: 4px 10px; cursor: pointer; }
   .filters input { accent-color: var(--accent-dark); }
 
+  .stage { width: 460px; flex: 0 0 460px; min-height: 0; background: #141414; display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+  .stage-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; flex: 0 0 auto; }
+  .stage-frame video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+  .stage-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: center; color: #eee; font-size: 13px; background: rgba(0,0,0,0.55); }
+  .stage-sound { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: none; z-index: 2; }
+  .stage-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; color: #eee; font-size: 12px; }
+  .stage-bar button { background: #2c2c2c; color: #eee; }
+  .stage-note { padding: 0 12px 12px; color: #9a9a9a; font-size: 11px; line-height: 1.5; }
+  .caption-box { flex: 1; min-height: 120px; display: flex; flex-direction: column; margin: 0 12px 8px; background: #1c1c1c; border-radius: 8px; overflow: hidden; }
+  .caption-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; color: #bbb; font-size: 11px; }
+  .caption-head button { background: #2c2c2c; color: #eee; padding: 4px 8px; font-size: 11px; }
+  .caption-head button:disabled { opacity: .45; cursor: default; }
+  .caption-lines { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 8px; color: #f5f5f5; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+  .caption-lines .caption-final { color: #f5f5f5; }
+  .caption-lines .caption-interim { color: #9a9a9a; }
   .feed { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
-  .ev { display: flex; gap: 10px; align-items: baseline; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: 13px; animation: fadein 0.25s; }
+  .ev { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: 13px; animation: fadein 0.25s; }
+  .match-info { display: none; flex: 1 0 100%; font-size: 11px; line-height: 1.5; color: var(--muted); }
+  .feed.show-match .match-info { display: block; }
+  .match-info.hit { color: #2d6a4f; }
+  .match-info.miss { color: #a8781a; }
   @keyframes fadein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
   .tag { flex: 0 0 auto; font-size: 11px; padding: 2px 8px; border-radius: 20px; color: #fff; }
   .tag.chat { background: var(--chat); } .tag.gift { background: var(--gift); } .tag.member { background: var(--member); }
@@ -219,6 +247,10 @@
           <label><input type="checkbox" value="roomStatus" />状态</label>
           <label><input type="checkbox" value="unknown" />其他</label>
         </div>
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;">
+          <input type="checkbox" id="showMatch" style="accent-color:var(--accent-dark);" /> 显示用户匹配
+        </label>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5;">勾选后按头像和昵称批量查询观众库，在每条事件下显示评论、送礼、点赞和出现过的直播间。</div>
       </div>
       <div>
         <div class="panel-title">查看房间</div>
@@ -228,6 +260,25 @@
         </div>
       </div>
     </aside>
+    <section class="stage">
+      <div class="stage-frame">
+        <video id="liveVideo" autoplay playsinline></video>
+        <div class="stage-empty" id="stageEmpty">选择一个房间后播放画面和声音</div>
+        <button class="stage-sound" id="stageSound" type="button">点击开启声音</button>
+      </div>
+      <div class="stage-bar">
+        <span id="stageTitle">未选择房间</span>
+        <span>
+          <button id="captionToggle" type="button">关闭转写</button>
+          <button id="stageMute" type="button">关闭声音</button>
+        </span>
+      </div>
+      <div class="caption-box">
+        <div class="caption-head"><span id="captionStatus">主播语音转写</span><button id="captionEngine" type="button" disabled>改用本机模型</button></div>
+        <div class="caption-lines" id="captionLines">选择房间后，主播说的话会显示在这里。</div>
+      </div>
+      <div class="stage-note">画面和声音来自当前房间的直播流。转写默认用浏览器自带的语音识别，不占显卡。需要时再手动改用本机模型。</div>
+    </section>
     <div class="feed" id="feed">
       <div class="empty" id="empty">暂无事件。连接直播间后，实时弹幕将显示在这里。</div>
     </div>
@@ -305,6 +356,7 @@
     <div class="ov-note" id="ovNote">浏览器内核冷启动约需 3~15 秒</div>
   </div>
 </div>
+<script src="/mpegts.js"></script>
 <script src="/emoji.js"></script>
 <script>
 (function () {
@@ -491,12 +543,569 @@ curl -X POST http://${base}/api/webhooks \\
   // 查看房间：'all' = 全部房间混流；否则为单个 roomId（前端过滤，切换即时生效）
   let currentRoom = 'all';
   const roomSelect = $('roomSelect');
+  let userPickedView = false;
+  let playingRoom = '';
+  let livePlayer = null;
+  let liveRetry = null;
+  /** 断流重连退避，避免固定 3 秒无限重连把服务端和抖音页都打爆 */
+  let liveRetryDelay = 3000;
+
+  /** 释放 captureStream 拿到的音轨：不 stop 会在每次重连后留一条活着的轨道，久了把标签页拖崩 */
+  function releaseCaptionStream(video) {
+    const stream = video && video.__captionStream;
+    if (!stream) return;
+    try { stream.getTracks().forEach((track) => track.stop()); } catch {}
+    delete video.__captionStream;
+  }
+
+  function stopLive() {
+    if (liveRetry) { clearTimeout(liveRetry); liveRetry = null; }
+    if (livePlayer) {
+      try { livePlayer.pause(); livePlayer.unload(); livePlayer.detachMediaElement(); livePlayer.destroy(); } catch {}
+      livePlayer = null;
+    }
+    playingRoom = '';
+    const video = $('liveVideo');
+    stopBrowserCaption();
+    releaseCaptionStream(video);
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    // 转写会话已随播放器销毁：清掉模式标记。否则 syncCaption 会因
+    // 「房间和模式都没变」提前返回，同一个房间重连后转写永远不再启动。
+    captionMode = '';
+  }
+
+  function showStage(text, cover) {
+    $('stageEmpty').textContent = text;
+    $('stageEmpty').style.display = cover ? 'flex' : 'none';
+  }
+
+  function playLive(rid) {
+    if (!rid || rid === 'all') {
+      if (playingRoom) stopLive();
+      $('stageTitle').textContent = '未选择房间';
+      $('stageSound').style.display = 'none';
+      showStage('选择一个房间后播放画面和声音', true);
+      syncCaption('');
+      return;
+    }
+    if (playingRoom === rid && livePlayer) return;
+    stopLive();
+    playingRoom = rid;
+    $('stageTitle').textContent = '房间 ' + rid;
+    $('stageSound').style.display = 'none';
+    showStage('正在连接画面…', true);
+    if (!window.mpegts || !mpegts.isSupported()) {
+      showStage('当前浏览器不能播放直播流', true);
+      return;
+    }
+    const video = $('liveVideo');
+    video.muted = false;
+    livePlayer = mpegts.createPlayer({
+      type: 'flv',
+      isLive: true,
+      url: '/api/rooms/' + encodeURIComponent(rid) + '/live.flv',
+    }, {
+      enableWorker: false,
+      enableStashBuffer: false,
+      stashInitialSize: 128,
+      lazyLoad: false,
+      autoCleanupSourceBuffer: true,
+      liveBufferLatencyChasing: true,
+    });
+    livePlayer.attachMediaElement(video);
+    const markPlaying = () => {
+      if (playingRoom !== rid) return;
+      liveRetryDelay = 3000;
+      showStage('', false);
+    };
+    livePlayer.on(mpegts.Events.MEDIA_INFO, markPlaying);
+    video.onplaying = markPlaying;
+    livePlayer.on(mpegts.Events.ERROR, (type, detail) => {
+      console.warn('[live] 播放中断', type, detail?.code ?? '', detail?.msg ?? '');
+      if (playingRoom !== rid || liveRetry) return;
+      showStage('画面暂时中断，正在重连…', true);
+      const wait = liveRetryDelay;
+      // 3s → 6s → 12s → 20s 封顶：真断流时别每 3 秒重建一次播放器和上游连接
+      liveRetryDelay = Math.min(liveRetryDelay * 2, 20000);
+      liveRetry = setTimeout(() => {
+        liveRetry = null;
+        if (playingRoom === rid) { playingRoom = ''; playLive(rid); }
+      }, wait);
+    });
+    livePlayer.load();
+    const started = video.play();
+    if (started && started.catch) {
+      started.catch(() => {
+        video.muted = true;
+        video.play().catch(() => {});
+        $('stageSound').style.display = 'block';
+      });
+    }
+    syncCaption(rid);
+  }
+
+  function unmuteLive() {
+    const video = $('liveVideo');
+    video.muted = false;
+    video.volume = 1;
+    video.play().catch(() => {});
+    $('stageSound').style.display = 'none';
+    $('stageMute').textContent = '关闭声音';
+    if (captionOn && playingRoom) startBrowserCaption(playingRoom);
+  }
+
+  $('stageSound').onclick = unmuteLive;
+  $('stageMute').onclick = () => {
+    const video = $('liveVideo');
+    video.muted = !video.muted;
+    if (!video.muted) unmuteLive();
+    else $('stageMute').textContent = '开启声音';
+  };
+
+  let captionOn = true;
+  let captionRoom = '';
+  let captionMode = '';
+  let captionSig = '';
+  let recognition = null;
+  let captionRestart = null;
+  let captionHeard = false;
+  let captionBlockRestart = false;
+  let captionFinal = '';
+  let captionPending = '';
+  let captionRetryDelay = 400;
+  let captionNetFails = 0;
+  const CAPTION_MAX_CHARS = 2000;
+  const CAPTION_RETRY_MAX = 10000;
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function refreshCaptionEngine() {
+    const btn = $('captionEngine');
+    btn.disabled = !(captionOn && captionRoom);
+    btn.textContent = captionMode === 'server' ? '改用浏览器' : '改用本机模型';
+  }
+
+  function browserCanCaptionTrack() {
+    if (!SpeechRec) return false;
+    const ua = navigator.userAgent;
+    // Edge 的 UA 里也带 Chrome/xxx，但它的语音识别后端未验证会消费传入的音轨，
+    // 一旦忽略参数就会静默改听麦克风（还会弹麦克风授权），所以只认 Chrome/Chromium。
+    if (/Edg\//.test(ua)) return false;
+    const match = ua.match(/(?:Chrome|Chromium)\/(\d+)/);
+    // Chrome 135 起 SpeechRecognition.start() 才支持传入 MediaStreamTrack
+    return !!match && Number(match[1]) >= 135;
+  }
+
+  function setServerCaption(roomId, enabled) {
+    if (!roomId) return;
+    fetch('/api/rooms/' + encodeURIComponent(roomId) + '/caption', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    }).catch(() => {});
+  }
+
+  function liveAudioTrack(video) {
+    try {
+      if (typeof video.captureStream === 'function') {
+        const current = video.__captionStream?.getAudioTracks().find((item) => item.readyState === 'live');
+        if (current) return current;
+        // 旧 stream 没有可用音轨：先把它彻底释放，再重新 capture，避免活轨道越攒越多
+        if (video.__captionStream) releaseCaptionStream(video);
+        const stream = video.captureStream();
+        // 只在真的拿到音轨时缓存：缓存空 stream 会让后续调用一直拿到「没有音轨」的旧引用
+        const track = stream.getAudioTracks().find((item) => item.readyState === 'live' && !item.muted)
+          || stream.getAudioTracks().find((item) => item.readyState === 'live');
+        if (track) {
+          video.__captionStream = stream;
+          return track;
+        }
+      }
+    } catch {}
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      if (!video.__captionAudio) {
+        const ctx = new Ctx();
+        const source = ctx.createMediaElementSource(video);
+        const dest = ctx.createMediaStreamDestination();
+        source.connect(dest);
+        source.connect(ctx.destination);
+        video.__captionAudio = { ctx, dest };
+      }
+      if (video.__captionAudio.ctx.state === 'suspended') void video.__captionAudio.ctx.resume();
+      return video.__captionAudio.dest.stream.getAudioTracks()[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function publishCaptionLine(text) {
+    const clean = (text || '').trim();
+    if (!clean || !captionRoom) return;
+    fetch('/api/rooms/' + encodeURIComponent(captionRoom) + '/captions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: clean, source: captionMode || 'browser' }),
+    }).catch(() => {});
+  }
+
+  function captionLog(event, detail) {
+    const payload = Object.assign({
+      event,
+      t: Date.now(),
+      pending: captionPending.slice(-120),
+      final: captionFinal.slice(-120),
+    }, detail || {});
+    console.log('[caption] ' + JSON.stringify(payload));
+    fetch('/api/caption-log', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }
+
+  function uncommitted(text) {
+    const clean = (text || '').trim();
+    if (!clean) return '';
+    const saved = captionFinal.replace(/\n/g, '');
+    if (saved && clean.startsWith(saved)) return clean.slice(saved.length).trim();
+    return clean;
+  }
+
+  function appendCaption(text) {
+    const clean = uncommitted(text);
+    if (!clean || clean.length < 2) return;
+    const lines = captionFinal ? captionFinal.split('\n') : [];
+    const last = lines.length ? lines[lines.length - 1] : '';
+    let piece = clean;
+    if (last) {
+      if (clean === last || last.endsWith(clean)) return;
+      if (clean.startsWith(last)) {
+        piece = clean.slice(last.length).trim();
+        if (piece.length < 2) {
+          lines[lines.length - 1] = clean;
+          captionFinal = lines.join('\n');
+          return;
+        }
+        lines[lines.length - 1] = clean;
+      } else {
+        let overlap = 0;
+        const max = Math.min(8, last.length, clean.length);
+        for (let i = max; i >= 2; i--) {
+          if (clean.startsWith(last.slice(-i))) { overlap = i; break; }
+        }
+        piece = (overlap ? clean.slice(overlap) : clean).trim();
+        if (piece.length < 2) return;
+        lines.push(piece);
+      }
+    } else {
+      lines.push(piece);
+    }
+    captionFinal = lines.join('\n');
+    if (captionFinal.length > CAPTION_MAX_CHARS) captionFinal = captionFinal.slice(-CAPTION_MAX_CHARS);
+    publishCaptionLine(piece);
+  }
+
+  function keepPending() {
+    const text = captionPending;
+    captionPending = '';
+    appendCaption(text);
+  }
+
+  function showCaption(interim) {
+    const box = $('captionLines');
+    const follow = box.scrollHeight - box.scrollTop - box.clientHeight < 48;
+    if (captionFinal.length > CAPTION_MAX_CHARS) captionFinal = captionFinal.slice(-CAPTION_MAX_CHARS);
+    if (!captionFinal && !(interim || '').trim()) {
+      box.textContent = '正在听主播…';
+      return;
+    }
+    box.innerHTML = '<span class="caption-final">' + escapeHtml(captionFinal) + '</span>'
+      + '<span class="caption-interim">' + escapeHtml(interim || '') + '</span>';
+    if (follow) box.scrollTop = box.scrollHeight;
+  }
+
+  function stopBrowserCaption() {
+    if (captionRestart) { clearTimeout(captionRestart); captionRestart = null; }
+    const current = recognition;
+    recognition = null;
+    if (!current) return;
+    current.onend = null;
+    current.onerror = null;
+    current.onresult = null;
+    current.onspeechend = null;
+    keepPending();
+    showCaption('');
+    try { current.abort(); } catch {}
+  }
+
+  function scheduleCaptionRestart(roomId, delayMs) {
+    if (captionRestart || recognition || captionBlockRestart) return;
+    const wait = typeof delayMs === 'number' ? delayMs : captionRetryDelay;
+    captionRestart = setTimeout(() => {
+      captionRestart = null;
+      if (!captionOn || captionRoom !== roomId || captionMode !== 'browser' || captionBlockRestart) return;
+      startBrowserCaption(roomId);
+    }, wait);
+  }
+
+  function startBrowserCaption(roomId) {
+    if (!captionOn || captionRoom !== roomId || captionMode === 'server') return;
+    const video = $('liveVideo');
+    if (recognition) return;
+    if (video.muted) {
+      $('captionStatus').textContent = '等待声音';
+      if (!captionFinal) $('captionLines').textContent = '先点「点击开启声音」，浏览器才能听到主播。';
+      return;
+    }
+    if (!browserCanCaptionTrack()) {
+      // SpeechRecognition 只在安全上下文暴露：用局域网 IP + http 打开控制台时它根本不存在
+      const secure = window.isSecureContext;
+      $('captionStatus').textContent = secure ? '浏览器不能识别直播声音' : '需用 localhost 或 HTTPS 打开';
+      $('captionLines').textContent = secure
+        ? '需要 Chrome / Chromium 135+，或点「改用本机模型」继续转写。'
+        : '浏览器语音识别只在安全上下文可用，请用 localhost 或 HTTPS 访问控制台。';
+      refreshCaptionEngine();
+      return;
+    }
+    captionMode = 'browser';
+    captionHeard = false;
+    const track = liveAudioTrack(video);
+    if (!track) {
+      $('captionStatus').textContent = '等待声音';
+      if (!captionFinal) $('captionLines').textContent = '正在等直播声音…';
+      scheduleCaptionRestart(roomId, 400);
+      return;
+    }
+    const rec = new SpeechRec();
+    rec.lang = 'zh-CN';
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => captionLog('start');
+    rec.onaudiostart = () => captionLog('audiostart');
+    rec.onsoundstart = () => captionLog('soundstart');
+    rec.onspeechstart = () => captionLog('speechstart');
+    rec.onsoundend = () => captionLog('soundend');
+    rec.onaudioend = () => captionLog('audioend');
+    rec.onresult = (event) => {
+      if (captionRoom !== roomId || recognition !== rec) return;
+      captionRetryDelay = 400;
+      captionNetFails = 0;
+      const rows = [];
+      let interim_transcript = '';
+      let finalText = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const text = event.results[i][0].transcript || '';
+        rows.push({ i, final: !!event.results[i].isFinal, n: text.length, text });
+        if (event.results[i].isFinal) finalText += text;
+        else interim_transcript += text;
+      }
+      const next = interim_transcript.trim();
+      const prev = captionPending.trim();
+      if (next.length >= 2 || finalText.trim().length >= 2) captionHeard = true;
+      let action = 'show';
+      if (!finalText && prev.length >= 6 && next.length > 0 && next.length <= 2) {
+        let shared = 0;
+        const n = Math.min(prev.length, next.length);
+        while (shared < n && prev.charCodeAt(shared) === next.charCodeAt(shared)) shared++;
+        if (shared <= 1) {
+          keepPending();
+          action = 'keep-reset';
+        }
+      }
+      if (finalText) {
+        captionPending = '';
+        const before = captionFinal;
+        appendCaption(finalText);
+        action = captionFinal === before ? 'final-skip' : 'final';
+      }
+      captionPending = interim_transcript;
+      captionLog('result', { resultIndex: event.resultIndex, len: event.results.length, rows, action });
+      $('captionStatus').textContent = '浏览器转写';
+      showCaption(uncommitted(captionPending));
+    };
+    rec.onspeechend = () => {
+      if (captionRoom !== roomId || recognition !== rec) return;
+      captionLog('speechend');
+    };
+    rec.onerror = (event) => {
+      const code = event.error || '';
+      captionLog('error', { code, message: event.message || '' });
+      if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'audio-capture'
+        || code === 'language-not-supported' || code === 'bad-grammar') {
+        captionBlockRestart = true;
+        if (captionRoom === roomId && recognition === rec) {
+          $('captionStatus').textContent = code === 'language-not-supported'
+            ? '浏览器不支持中文识别'
+            : '浏览器不允许转写，可手动改用本机模型';
+        }
+        return;
+      }
+      if (code === 'network') {
+        captionNetFails += 1;
+        captionRetryDelay = Math.min(CAPTION_RETRY_MAX, captionRetryDelay * 2);
+        if (captionRoom === roomId) {
+          $('captionStatus').textContent = captionNetFails >= 3
+            ? '浏览器识别服务连不上，请改用本机模型'
+            : '浏览器识别服务连不上，稍后重试';
+        }
+        if (captionNetFails >= 3) captionBlockRestart = true;
+      } else if (code === 'no-speech' && captionRoom === roomId) {
+        $('captionStatus').textContent = '等主播说话…';
+      }
+    };
+    rec.onend = () => {
+      if (recognition !== rec || captionRoom !== roomId || captionMode !== 'browser') return;
+      const heard = captionHeard || captionPending.trim().length >= 2;
+      captionHeard = false;
+      const before = captionFinal;
+      const pending = captionPending;
+      keepPending();
+      captionLog('end', { heard, pending, kept: captionFinal !== before });
+      showCaption('');
+      recognition = null;
+      if ($('liveVideo').muted || captionBlockRestart) return;
+      if (captionNetFails > 0) {
+        scheduleCaptionRestart(roomId, captionRetryDelay);
+        return;
+      }
+      if (!heard) {
+        scheduleCaptionRestart(roomId, 250);
+        return;
+      }
+      startBrowserCaption(roomId);
+    };
+    recognition = rec;
+    if (!track.__captionHook) {
+      track.__captionHook = true;
+      track.addEventListener('ended', () => {
+        captionLog('track-ended', { readyState: track.readyState });
+        video.__captionStream = null;
+        const current = recognition;
+        if (!current) return;
+        try { current.abort(); } catch {}
+      });
+    }
+    try {
+      captionLog('starting', { trackState: track.readyState, trackMuted: track.muted });
+      rec.start(track);
+      $('captionStatus').textContent = '浏览器转写';
+      if (!captionFinal) $('captionLines').textContent = '正在听主播…';
+      refreshCaptionEngine();
+    } catch (error) {
+      captionLog('start-failed', { message: error && error.message ? error.message : String(error) });
+      recognition = null;
+      captionRetryDelay = Math.min(CAPTION_RETRY_MAX, captionRetryDelay * 2);
+      $('captionStatus').textContent = '浏览器转写没有启动';
+      if (!captionFinal) $('captionLines').textContent = '可点「改用本机模型」继续转写。';
+      refreshCaptionEngine();
+      scheduleCaptionRestart(roomId, captionRetryDelay);
+    }
+  }
+
+  function syncCaption(rid) {
+    const next = captionOn && rid && rid !== 'all' ? String(rid) : '';
+    // 只有「同一房间且识别会话还活着（或本机模型在跑）」才跳过：
+    // 否则播放器重连把会话停掉后，这里会把转写永久卡死。
+    if (next === captionRoom && (recognition || captionMode === 'server')) return;
+    const prev = captionRoom;
+    stopBrowserCaption();
+    captionBlockRestart = false;
+    captionRetryDelay = 400;
+    captionNetFails = 0;
+    captionRoom = next;
+    captionMode = '';
+    captionSig = '';
+    captionFinal = '';
+    captionPending = '';
+    if (prev && prev !== next) setServerCaption(prev, false);
+    if (next) {
+      $('captionLines').textContent = '正在用浏览器听主播…';
+      $('captionStatus').textContent = '浏览器转写';
+      setServerCaption(next, false);
+      const video = $('liveVideo');
+      const begin = () => { if (captionRoom === next) startBrowserCaption(next); };
+      if (!video.paused && video.readyState >= 2) begin();
+      else video.addEventListener('playing', begin, { once: true });
+    } else {
+      $('captionLines').textContent = '转写已关闭。';
+      $('captionStatus').textContent = '未转写';
+    }
+    $('captionToggle').textContent = captionOn && next ? '关闭转写' : '开启转写';
+    refreshCaptionEngine();
+  }
+  async function pollCaption() {
+    if (!captionRoom || captionMode !== 'server') return;
+    try {
+      const data = await (await fetch('/api/rooms/' + encodeURIComponent(captionRoom) + '/caption')).json();
+      $('captionStatus').textContent = data.status || '本机模型转写';
+      const sig = JSON.stringify(data.lines || []);
+      if (sig === captionSig) return;
+      captionSig = sig;
+      const box = $('captionLines');
+      if (!data.lines || !data.lines.length) {
+        box.textContent = data.status || '正在听主播…';
+        return;
+      }
+      box.innerHTML = data.lines.map((line) => `<div>${escapeHtml(line.text)}</div>`).join('');
+      box.scrollTop = box.scrollHeight;
+    } catch {}
+  }
+  $('captionToggle').onclick = () => {
+    captionOn = !captionOn;
+    if (!captionOn) {
+      const prev = captionRoom;
+      stopBrowserCaption();
+      captionRoom = '';
+      captionMode = '';
+      captionSig = '';
+      captionFinal = '';
+    captionPending = '';
+      if (prev) setServerCaption(prev, false);
+      $('captionLines').textContent = '转写已关闭。';
+      $('captionStatus').textContent = '未转写';
+      $('captionToggle').textContent = '开启转写';
+      refreshCaptionEngine();
+      return;
+    }
+    syncCaption(playingRoom);
+  };
+  $('captionEngine').onclick = () => {
+    if (!captionOn || !captionRoom) return;
+    if (captionMode === 'server') {
+      captionMode = 'browser';
+      captionBlockRestart = false;
+      captionRetryDelay = 400;
+      captionNetFails = 0;
+      captionSig = '';
+      captionFinal = '';
+    captionPending = '';
+      setServerCaption(captionRoom, false);
+      startBrowserCaption(captionRoom);
+      refreshCaptionEngine();
+      return;
+    }
+    stopBrowserCaption();
+    captionMode = 'server';
+    captionSig = '';
+    $('captionStatus').textContent = '本机模型转写';
+    if (!captionFinal) $('captionLines').textContent = '正在加载本机模型…';
+    setServerCaption(captionRoom, true);
+    refreshCaptionEngine();
+  };
+  setInterval(pollCaption, 1000);
+
   function switchRoom(rid) {
+    userPickedView = true;
     currentRoom = rid;
     const feed = $('feed');
     feed.innerHTML = `<div class="empty">正在查看${rid === 'all' ? '全部房间（混流）' : '房间 ' + rid}…</div>`;
     // 同步房间列表高亮
     document.querySelectorAll('.room-item').forEach(el => el.classList.toggle('active', el.dataset.room === rid));
+    playLive(rid);
   }
   roomSelect.addEventListener('change', () => switchRoom(roomSelect.value));
 
@@ -541,9 +1150,16 @@ curl -X POST http://${base}/api/webhooks \\
     }
     const el = document.createElement('div');
     el.className = 'ev';
+    const nick = (ev.user && ev.user.nickname) || '';
+    const avatar = (ev.user && ev.user.avatar) || '';
+    if (nick || avatar) {
+      el.dataset.nick = nick;
+      el.dataset.avatar = avatar;
+    }
     const tm = new Date(ev.receivedAt || Date.now()).toLocaleTimeString('zh-CN', { hour12: false });
     const avatarHtml = avatarHTML(ev.user);
-    el.innerHTML = `<span class="tag ${ev.type}">${label[ev.type] || ev.type}</span><span class="roompill">${escapeHtml(String(ev.roomId))}</span>${avatarHtml}<span class="who">${escapeHtml(who)}</span><span class="what">${what}</span><span class="tm">${tm}</span>`;
+    el.innerHTML = `<span class="tag ${ev.type}">${label[ev.type] || ev.type}</span><span class="roompill">${escapeHtml(String(ev.roomId))}</span>${avatarHtml}<span class="who">${escapeHtml(who)}</span><span class="what">${what}</span><span class="tm">${tm}</span><span class="match-info"></span>`;
+    if ($('showMatch').checked && (nick || avatar)) queueMatch();
     feed.appendChild(el);
     while (feed.children.length > 800) feed.removeChild(feed.firstChild);
     feed.scrollTop = feed.scrollHeight;
@@ -570,11 +1186,13 @@ curl -X POST http://${base}/api/webhooks \\
       // 对接演示地址跟随第一个已连接房间（短号），无房间时回退示例号
       renderDemo(roomIds[0] || '708764876300');
       const prev = roomSelect.value;
-      const cur = roomIds.includes(prev) ? prev : 'all';
+      let cur = roomIds.includes(prev) ? prev : 'all';
+      if (!userPickedView && cur === 'all' && roomIds.length === 1) cur = roomIds[0];
       roomSelect.innerHTML = '<option value="all">全部房间（混流）</option>' +
         roomIds.map(id => `<option value="${id}">${id}</option>`).join('');
       roomSelect.value = cur;
       currentRoom = cur;
+      playLive(cur);
       // 房间列表：可点击切换查看
       const list = $('roomList');
       list.innerHTML = '';
@@ -598,18 +1216,22 @@ curl -X POST http://${base}/api/webhooks \\
             : r.status === 'error'
               ? `<button class="card-btn" data-act="retry" data-rid="${rid}">重连</button>`
               : '';
+        const reporting = r.reporting !== false;
         const cookieBadge = r.hasOwnCookie ? `<span class="roompill" title="使用独立 cookie">🍪</span>` : '';
-        item.innerHTML = `<div style="min-width:0;flex:1">
-            <div class="r-head">${avatar}<div class="r-info"><div class="r-name">${escapeHtml(nick)} ${cookieBadge}</div>${meta.title ? `<div class="r-title">${escapeHtml(meta.title)}</div>` : ''}</div></div>
-            <div class="r-foot"><span class="rid">${rid}</span> · ${r.msgCount.toLocaleString()} 条消息</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-            <span class="st ${r.status}">${stText}</span>
-            <div style="display:flex;gap:4px;">
-              ${actBtn}
-              <button class="card-btn" data-act="cookie" data-rid="${rid}" title="设置独立 cookie">Cookie</button>
-              <button class="card-btn danger" data-act="remove" data-rid="${rid}" title="删除房间">删除</button>
+        item.innerHTML = `<div class="r-top">
+            <div class="r-body">
+              <div class="r-head">${avatar}<div class="r-info"><div class="r-name">${escapeHtml(nick)} ${cookieBadge}</div>${meta.title ? `<div class="r-title">${escapeHtml(meta.title)}</div>` : ''}</div></div>
+              <div class="r-foot"><span class="rid">${rid}</span></div>
+              <div class="r-tally" data-rid="${rid}">${tallyInner(r)}</div>
             </div>
+            <span class="st ${r.status}">${stText}</span>
+          </div>
+          ${sessionControls(r, rid)}
+          <div class="r-actions">
+            ${actBtn}
+            <button class="card-btn ${reporting ? '' : 'danger'}" data-act="report" data-rid="${rid}" data-enabled="${reporting ? '1' : '0'}">${reporting ? '停止上报' : '开始上报'}</button>
+            <button class="card-btn" data-act="cookie" data-rid="${rid}" title="设置独立 cookie">Cookie</button>
+            <button class="card-btn danger" data-act="remove" data-rid="${rid}" title="删除房间">删除</button>
           </div>`;
         list.appendChild(item);
       }
@@ -628,12 +1250,80 @@ curl -X POST http://${base}/api/webhooks \\
           } else if (act === 'remove') {
             if (!confirm(`确定删除房间 ${rid}？删除后需重新输入房号连接。`)) return;
             fetch(`/api/rooms/${rid}`, { method: 'DELETE' }).then(() => refresh());
+          } else if (act === 'report') {
+            const enabled = btn.dataset.enabled !== '1';
+            fetch(`/api/rooms/${rid}/reporting`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled }),
+            }).then(() => refresh());
           } else if (act === 'cookie') {
             roomCookieDialog(rid);
+          } else if (act === 'new-session') {
+            fetch(`/api/rooms/${rid}/sessions`, { method: 'POST' })
+              .then(async (res) => {
+                if (!res.ok) {
+                  const j = await res.json().catch(() => ({}));
+                  alert(j.error || '新场次失败');
+                }
+                refresh();
+              });
           }
         });
       });
+      list.querySelectorAll('.session-select').forEach((sel) => {
+        sel.addEventListener('click', (e) => e.stopPropagation());
+        sel.addEventListener('change', (e) => {
+          e.stopPropagation();
+          fetch(`/api/rooms/${sel.dataset.rid}/session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: Number(sel.value) }),
+          }).then(async (res) => {
+            if (!res.ok) {
+              const j = await res.json().catch(() => ({}));
+              alert(j.error || '切换场次失败');
+            }
+            refresh();
+          });
+        });
+      });
     } catch {}
+  }
+
+  function tallyInner(room) {
+    const tally = room.tally;
+    if (!tally) return '';
+    const n = (value) => Number(value || 0).toLocaleString('zh-CN');
+    return `<span>弹幕 <b>${n(tally.chat)}</b></span><span>礼物 <b>${n(tally.gift)}</b></span><span>关注 <b>${n(tally.follow)}</b></span>`;
+  }
+
+  function sessionStartLabel(iso) {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    const time = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
+    return `${time} 开始`;
+  }
+
+  function sessionControls(room, rid) {
+    const pack = room.sessions;
+    if (!pack || !Array.isArray(pack.sessions) || pack.sessions.length === 0) return '';
+    const active = Number(pack.activeId);
+    const current = pack.sessions.find((session) => Number(session.id) === active) || pack.sessions[pack.sessions.length - 1];
+    const start = sessionStartLabel(current && current.startedAt);
+    const options = pack.sessions.map((session) => {
+      const date = String(session.sessionDate || '').slice(5);
+      const label = `${date} 第${session.sessionNo}场`;
+      const selected = Number(session.id) === active ? ' selected' : '';
+      return `<option value="${session.id}"${selected}>${label}</option>`;
+    }).join('');
+    return `<div class="r-session"><select class="session-select" data-rid="${rid}">${options}</select>${start ? `<span class="session-start">${start}</span>` : ''}<button class="card-btn" data-act="new-session" data-rid="${rid}">新场次</button></div>`;
   }
 
   async function connect(roomId) {
@@ -661,6 +1351,8 @@ curl -X POST http://${base}/api/webhooks \\
       if (!roomId) $('roomInput').value = '';
       if (!roomId) $('roomCookieInput').value = '';
       await progressPromise;
+      roomSelect.value = rid;
+      switchRoom(rid);
     } finally {
       btn.innerHTML = orig;
       btn.disabled = false;
@@ -777,7 +1469,102 @@ curl -X POST http://${base}/api/webhooks \\
   });
   $('roomInput').addEventListener('keydown', e => { if (e.key === 'Enter') connect(); });
   document.querySelectorAll('#filters input').forEach(i => i.addEventListener('change', () => { if (ws) ws.close(); }));
+
+  const matchCache = new Map();
+  let matchTimer = null;
+  function userMatchKey(nick, avatar) { return nick + '\n' + avatar; }
+  function matchText(item) {
+    if (!item || !item.found) return item && item.error ? '查询失败' : '库中无此人';
+    const rooms = (item.rooms || []).map(r => r.roomId);
+    const roomText = rooms.length
+      ? rooms.slice(0, 4).join('、') + (rooms.length > 4 ? ` 等${rooms.length}个直播间` : '')
+      : '无';
+    return `评论 ${item.commentCount} · 送礼 ${item.giftCount} · 点赞 ${item.likeCount || 0} · 出现过 ${roomText}`;
+  }
+  function paintMatches() {
+    const on = $('showMatch').checked;
+    $('feed').classList.toggle('show-match', on);
+    if (!on) return;
+    document.querySelectorAll('#feed .ev').forEach((el) => {
+      const info = el.querySelector('.match-info');
+      if (!info) return;
+      const nick = el.dataset.nick || '';
+      const avatar = el.dataset.avatar || '';
+      if (!nick && !avatar) { info.textContent = ''; return; }
+      const cached = matchCache.get(userMatchKey(nick, avatar));
+      if (!cached) { info.textContent = '正在查询…'; info.className = 'match-info'; return; }
+      info.textContent = matchText(cached.match);
+      info.className = cached.match && cached.match.found ? 'match-info hit' : 'match-info miss';
+    });
+  }
+  async function flushMatchQueue() {
+    matchTimer = null;
+    if (!$('showMatch').checked) return;
+    const wanted = [];
+    const seen = new Set();
+    document.querySelectorAll('#feed .ev').forEach((el) => {
+      const nick = el.dataset.nick || '';
+      const avatar = el.dataset.avatar || '';
+      if (!nick && !avatar) return;
+      const key = userMatchKey(nick, avatar);
+      if (seen.has(key)) return;
+      const cached = matchCache.get(key);
+      if (cached && Date.now() - cached.at < 15000) return;
+      seen.add(key);
+      wanted.push({ nickname: nick, avatar });
+    });
+    paintMatches();
+    for (let i = 0; i < wanted.length; i += 100) {
+      const chunk = wanted.slice(i, i + 100);
+      try {
+        const res = await fetch('/api/audience/match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ users: chunk }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '查询失败');
+        (data.matches || []).forEach((item, idx) => {
+          const src = chunk[idx];
+          matchCache.set(userMatchKey(src.nickname, src.avatar), { at: Date.now(), match: item });
+        });
+      } catch (err) {
+        chunk.forEach((src) => {
+          matchCache.set(userMatchKey(src.nickname, src.avatar), {
+            at: Date.now() - 12000,
+            match: { found: false, error: true },
+          });
+        });
+      }
+    }
+    paintMatches();
+  }
+  function queueMatch() {
+    if (!$('showMatch').checked) return;
+    if (matchTimer) return;
+    matchTimer = setTimeout(flushMatchQueue, 300);
+  }
+  $('showMatch').addEventListener('change', () => {
+    if (!$('showMatch').checked) {
+      $('feed').classList.remove('show-match');
+      return;
+    }
+    matchCache.clear();
+    queueMatch();
+  });
   setInterval(() => { $('stRate').textContent = (rateCounter * 60 / 30).toFixed(0); rateCounter = 0; refresh(); }, 30000);
+  setInterval(refreshTallies, 5000);
+  async function refreshTallies() {
+    try {
+      const s = await (await fetch('/api/stats')).json();
+      for (const room of s.rooms || []) {
+        const el = document.querySelector(`.r-tally[data-rid="${room.roomId}"]`);
+        if (!el) continue;
+        const html = tallyInner(room);
+        if (el.innerHTML !== html) el.innerHTML = html;
+      }
+    } catch {}
+  }
   // ---- Cookie 管理 ----
   function updateCookieStatus(s) {
     const el = $('cookieStatus');

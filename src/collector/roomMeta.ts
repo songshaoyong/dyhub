@@ -113,8 +113,8 @@ async function ensureCookies(): Promise<void> {
   jarAt = Date.now() - (JAR_TTL_MS - JAR_FAIL_TTL_MS);
 }
 
-/** 抓取直播间页并解析主播信息（失败返回 null，不抛错） */
-export async function fetchRoomMeta(roomId: string): Promise<RoomMeta | null> {
+/** 抓取直播间页 HTML（失败返回 null，不抛错） */
+export async function fetchLivePage(roomId: string): Promise<string | null> {
   try {
     await ensureCookies();
     const r = await fetch(`https://live.douyin.com/${roomId}`, {
@@ -126,8 +126,16 @@ export async function fetchRoomMeta(roomId: string): Promise<RoomMeta | null> {
       signal: AbortSignal.timeout(12_000),
     });
     if (!r.ok) return null;
-    return parseRoomMeta(await r.text());
+    return await r.text();
   } catch {
     return null;
   }
 }
+
+/** 抓取直播间页并解析主播信息（失败返回 null，不抛错） */
+export async function fetchRoomMeta(roomId: string): Promise<RoomMeta | null> {
+  const html = await fetchLivePage(roomId);
+  return html ? parseRoomMeta(html) : null;
+}
+
+export const LIVE_PAGE_UA = UA;

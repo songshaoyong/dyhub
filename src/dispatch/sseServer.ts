@@ -50,6 +50,8 @@ export function registerSseRoute(app: FastifyInstance, bus: EventBus, collector:
 
     const handler = (ev: DanmakuEvent) => {
       if (!eventMatches(ev, filter)) return;
+      // 客户端断开后总线可能仍持有本处理器一小段时间，写入已结束的流会抛 ERR_STREAM_WRITE_AFTER_END
+      if (reply.raw.writableEnded || reply.raw.destroyed) return;
       reply.raw.write(`data: ${JSON.stringify(ev)}\n\n`);
     };
     const subId = bus.subscribe(undefined, handler);

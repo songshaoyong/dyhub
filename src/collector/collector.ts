@@ -8,12 +8,27 @@
  * 两种内核产出同样的 RawProtoMessage，管道与消费端无感知。
  */
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { BrowserManager } from './browser.js';
 import { LiveSession } from './liveSession.js';
 import { fetchRoomMeta } from './roomMeta.js';
 import type { RoomMeta } from './roomMeta.js';
 import type { RawProtoMessage } from '../proto/douyin.proto.js';
 import * as cookieStore from './cookieStore.js';
+
+/** 房间名单。停进程后仍在，下次启动把还在连接的房间重新连上。 */
+const ROOMS_FILE = join(process.cwd(), 'data', 'rooms.json');
+
+interface PersistedRoom {
+  roomId: string;
+  meta: RoomMeta | null;
+  msgCount: number;
+  hasOwnCookie: boolean;
+  /** 用户没有手动停止。重启后这些房间会自动重连。 */
+  active: boolean;
+  updatedAt: number;
+}
 
 /** 采集会话的统一形状（LiveSession / LightweightSession 都实现） */
 export interface SessionLike {
@@ -26,6 +41,8 @@ export interface SessionLike {
   waitForLive(timeoutMs?: number): Promise<boolean>;
   /** 从页面 HTML 解析开播状态（仅浏览器内核实现；轻量内核在 resolveRoomId 内自行解析） */
   getRoomStatus?(): Promise<number | null>;
+  /** 截取当前直播画面（仅浏览器内核；失败返回 null） */
+  screenshot?(): Promise<Buffer | null>;
   /** 会话自带的直播间主播信息（轻量内核连接时解析；无则走 fetchRoomMeta 兜底） */
   meta?: RoomMeta | null;
 }
@@ -64,6 +81,8 @@ export class Collector {
   private metas = new Map<string, RoomMeta | null>();
   /** 已停止但保留的房间（不删除，随时可恢复连接） */
   private saved = new Map<string, { meta: RoomMeta | null; msgCount: number; stoppedAt: number }>();
+  /** 磁盘上的房间名单，连接 / 停止 / 删除时更新 */
+  private remembered = new Map<string, PersistedRoom>();
   /** 连接过程进度 */
   private progress = new Map<string, { step: ConnectStep; detail?: string; ts: number }>();
   /** 进行中的连接 Promise，防止并发重复连接同一房间（多个订阅者同时接入时只开一次采集） */
@@ -87,6 +106,12 @@ export class Collector {
     if (this.onStatusChange) {
       this.statusTimer = setInterval(() => this.pollStatuses(), 2000);
     }
+    this.loadRooms();
+  }
+
+  /** 上次退出时仍在连接、需要自动重连的房间 */
+  roomsToResume(): string[] {
+    return [...this.remembered.values()].filter((room) => room.active).map((room) => room.roomId);
   }
 
   /**
@@ -123,10 +148,10 @@ export class Collector {
       this.progress.delete(roomId);
     }
     // 恢复保留的房间：沿用其主播信息，停止保留态
-    if (this.saved.has(roomId)) {
-      const s = this.saved.get(roomId)!;
+    const held = this.saved.get(roomId);
+    if (held) {
       this.saved.delete(roomId);
-      this.metas.set(roomId, s.meta);
+      this.metas.set(roomId, held.meta);
     }
     const setProgress = (step: ConnectStep, detail?: string) =>
       this.progress.set(roomId, { step, detail, ts: Date.now() });
@@ -135,10 +160,17 @@ export class Collector {
     // 确定本房间使用的 cookie：显式传入 > cookieStore 已有独立 cookie > 全局（undefined）
     const cookie = opts?.cookie ?? (cookieStore.hasRoomCookie(roomId) ? cookieStore.getRoomCookieStr(roomId) : undefined);
     this.ownCookies.set(roomId, !!cookie);
-    const session = this.createSession
-      ? this.createSession(roomId, cookie)
-      : await this.createBrowserSession(roomId, cookie);
+    let session: SessionLike;
+    try {
+      session = this.createSession
+        ? this.createSession(roomId, cookie)
+        : await this.createBrowserSession(roomId, cookie);
+    } catch (err) {
+      if (held) this.saved.set(roomId, held);
+      throw err;
+    }
     this.sessions.set(roomId, session);
+    this.noteRoom(roomId, true);
     session.start?.();
     this.fireStatusChange(roomId, 'connecting');
     setProgress('listening');
@@ -149,12 +181,14 @@ export class Collector {
       const m = session.meta;
       if (m) {
         this.metas.set(roomId, m);
+        this.noteRoom(roomId, true);
         return;
       }
       fetchRoomMeta(roomId).then((meta) => {
         if (!this.sessions.has(roomId)) return;
         if (meta) {
           this.metas.set(roomId, meta);
+          this.noteRoom(roomId, true);
         } else if (attempt < 5) {
           setTimeout(() => ensureMeta(attempt + 1), 30_000);
         }
@@ -201,8 +235,11 @@ export class Collector {
     return session;
   }
 
-  /** 停止一个直播间的采集（保留房间记录与主播信息，随时可恢复连接） */
-  async disconnect(roomId: string): Promise<void> {
+  /**
+   * 停止一个直播间的采集（保留房间记录与主播信息，随时可恢复连接）。
+   * keepActive：进程退出时用，不把房间标成手动停止，下次启动仍会重连。
+   */
+  async disconnect(roomId: string, opts?: { keepActive?: boolean }): Promise<void> {
     const s = this.sessions.get(roomId);
     if (s) {
       await s.stop();
@@ -216,6 +253,7 @@ export class Collector {
     }
     this.errors.delete(roomId);
     this.progress.delete(roomId);
+    if (!opts?.keepActive && (s || this.remembered.has(roomId))) this.noteRoom(roomId, false);
   }
 
   /** 彻底删除一个房间（含已停止保留的记录），房间从列表消失 */
@@ -232,6 +270,7 @@ export class Collector {
     this.progress.delete(roomId);
     this.ownCookies.delete(roomId);
     this.lastStatus.delete(roomId);
+    this.forgetRoom(roomId);
   }
 
   /** 全部已连接房间 + 已停止保留的房间 */
@@ -268,9 +307,16 @@ export class Collector {
     return null;
   }
 
-  async disconnectAll(): Promise<void> {
+  /** 截取指定房间的当前画面。轻量内核没有页面，返回 null。 */
+  async screenshot(roomId: string): Promise<Buffer | null> {
+    const session = this.sessions.get(roomId);
+    if (!session?.screenshot) return null;
+    return session.screenshot();
+  }
+
+  async disconnectAll(opts?: { keepActive?: boolean }): Promise<void> {
     const ids = [...this.sessions.keys()];
-    for (const id of ids) await this.disconnect(id);
+    for (const id of ids) await this.disconnect(id, opts);
     if (this.statusTimer) {
       clearInterval(this.statusTimer);
       this.statusTimer = null;
@@ -291,6 +337,66 @@ export class Collector {
     for (const [roomId, session] of this.sessions) {
       const error = this.errors.get(roomId);
       this.fireStatusChange(roomId, session.status, error);
+    }
+  }
+
+  private loadRooms(): void {
+    try {
+      if (!existsSync(ROOMS_FILE)) return;
+      const data = JSON.parse(readFileSync(ROOMS_FILE, 'utf8')) as { rooms?: PersistedRoom[] };
+      const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+      for (const room of rooms) {
+        const roomId = String(room?.roomId ?? '').replace(/\D/g, '');
+        if (!roomId) continue;
+        const meta = room.meta && typeof room.meta === 'object' ? room.meta : null;
+        const msgCount = Number(room.msgCount) || 0;
+        const entry: PersistedRoom = {
+          roomId,
+          meta,
+          msgCount,
+          hasOwnCookie: Boolean(room.hasOwnCookie),
+          active: room.active !== false,
+          updatedAt: Number(room.updatedAt) || Date.now(),
+        };
+        this.remembered.set(roomId, entry);
+        this.saved.set(roomId, { meta, msgCount, stoppedAt: entry.updatedAt });
+        if (meta) this.metas.set(roomId, meta);
+        if (entry.hasOwnCookie) this.ownCookies.set(roomId, true);
+      }
+    } catch (err) {
+      console.warn('[dyhub] 读取房间记录失败:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  /** 把房间写入名单。active=false 表示用户手动停止，重启后只显示、不自动连。 */
+  private noteRoom(roomId: string, active: boolean): void {
+    const session = this.sessions.get(roomId);
+    const saved = this.saved.get(roomId);
+    const prev = this.remembered.get(roomId);
+    const entry: PersistedRoom = {
+      roomId,
+      meta: this.metas.get(roomId) ?? saved?.meta ?? prev?.meta ?? null,
+      msgCount: session?.stats().msgCount ?? saved?.msgCount ?? prev?.msgCount ?? 0,
+      hasOwnCookie: this.ownCookies.get(roomId) ?? false,
+      active,
+      updatedAt: Date.now(),
+    };
+    this.remembered.set(roomId, entry);
+    this.writeRooms();
+  }
+
+  private forgetRoom(roomId: string): void {
+    if (!this.remembered.delete(roomId)) return;
+    this.writeRooms();
+  }
+
+  private writeRooms(): void {
+    try {
+      mkdirSync(join(process.cwd(), 'data'), { recursive: true });
+      const rooms = [...this.remembered.values()].sort((a, b) => a.roomId.localeCompare(b.roomId));
+      writeFileSync(ROOMS_FILE, JSON.stringify({ rooms }, null, 2));
+    } catch (err) {
+      console.warn('[dyhub] 保存房间记录失败:', err instanceof Error ? err.message : err);
     }
   }
 }

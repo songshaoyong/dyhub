@@ -34,6 +34,8 @@ export class LiveSession {
   private frameCount = 0;
   private msgCount = 0;
   private stopped = false;
+  /** CDP requestId → wss url（帧事件本身不带 url，靠 webSocketCreated 关联） */
+  private wsUrls = new Map<string, string>();
 
   constructor(roomId: string, page: Page, cdp: CDPSession, opts: LiveSessionOptions, ownContext?: BrowserContext) {
     this.roomId = roomId;
@@ -44,10 +46,27 @@ export class LiveSession {
     this.attach();
   }
 
+  /**
+   * 是否明确属于非弹幕通道。
+   * 页面里除弹幕 wss 外还有日志上报等连接：它们的帧无需解码，
+   * 它们关闭也不代表直播间断开。url 未知时返回 false（放行），避免漏采。
+   */
+  private isOtherSocket(params: any): boolean {
+    const requestId = String(params?.requestId ?? '');
+    if (!requestId) return false;
+    const url = this.wsUrls.get(requestId);
+    return url ? !url.includes('/webcast/im/') : false;
+  }
+
   private attach(): void {
-    // CDP 的 webSocketFrameReceived 事件不含 url，无法按连接过滤；
-    // 直接对全部帧尝试解码，非 PushFrame / 非法帧会被 decodeFrame 安全忽略（无副作用）。
+    // CDP 的帧事件不含 url，先用 webSocketCreated 建立 requestId → url 映射
+    this.cdp.on('Network.webSocketCreated', (params: any) => {
+      const requestId = String(params?.requestId ?? '');
+      if (requestId) this.wsUrls.set(requestId, String(params?.url ?? ''));
+    });
+
     this.cdp.on('Network.webSocketFrameReceived', (params: any) => {
+      if (this.isOtherSocket(params)) return;
       this.wsCount++;
       const payloadData: string | undefined = params?.response?.payloadData;
       if (!payloadData) return;
@@ -73,7 +92,9 @@ export class LiveSession {
         this.opts.onMessage(msg, { roomId: this.roomId });
       }
     });
-    this.cdp.on('Network.webSocketClosed', () => {
+    this.cdp.on('Network.webSocketClosed', (params: any) => {
+      // 只把弹幕通道的关闭视为直播间断开，避免上报类 wss 断开导致状态误判
+      if (this.isOtherSocket(params)) return;
       if (!this.stopped) {
         this.status = 'closed';
         this.opts.onError?.(new Error(`房间 ${this.roomId} wss 连接已关闭`));
@@ -117,6 +138,27 @@ export class LiveSession {
 
   stats() {
     return { wsCount: this.wsCount, frameCount: this.frameCount, msgCount: this.msgCount };
+  }
+
+  /** 截取播放器区域。没有可用画面时退回整页。 */
+  async screenshot(): Promise<Buffer | null> {
+    try {
+      const clip = await this.page.evaluate(() => {
+        const video = document.querySelector('video');
+        if (!video) return null;
+        const rect = video.getBoundingClientRect();
+        if (rect.width < 80 || rect.height < 80) return null;
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      });
+      return await this.page.screenshot({
+        type: 'jpeg',
+        quality: 55,
+        timeout: 8000,
+        ...(clip ? { clip } : {}),
+      });
+    } catch {
+      return null;
+    }
   }
 
   async stop(): Promise<void> {

@@ -23,6 +23,7 @@ export type DanmakuEventType =
   | 'follow'    // 关注
   | 'room'        // 房间统计（在线人数等）
   | 'roomStatus'  // 房间状态变更（connecting/live/closed/error/stopped）
+  | 'caption'     // 转写定稿（主播语音等，已完成的一句）
   | 'unknown';    // 尚未标准化的原始消息（透传）
 
 /** 直播间用户（标准化） */
@@ -99,6 +100,14 @@ export interface RoomStatusEvent extends BaseDanmakuEvent {
   };
 }
 
+export interface CaptionEvent extends BaseDanmakuEvent {
+  type: 'caption';
+  data: {
+    content: string;
+    source?: string;
+  };
+}
+
 export interface UnknownEvent extends BaseDanmakuEvent {
   type: 'unknown';
   data: { method: string; payloadBase64?: string };
@@ -113,6 +122,7 @@ export type DanmakuEvent =
   | FollowEvent
   | RoomEvent
   | RoomStatusEvent
+  | CaptionEvent
   | UnknownEvent;
 
 /** 事件订阅过滤器：可订阅全部，或按 roomId / type 过滤 */

@@ -54,6 +54,14 @@ function createTime(body: any): number {
 }
 
 /**
+ * 事件 id：优先用平台 msgId。
+ * 没有 msgId 时必须生成唯一 id —— 留空会让去重器把所有空 id 事件当成同一条而丢弃。
+ */
+function eventId(msg: RawProtoMessage, decodedId: string | undefined, roomId: string): string {
+  return msg.msgId || decodedId || `${roomId}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
  * 把一条抖音原始消息标准化为统一事件。
  * @returns 标准化事件；无法识别的消息返回 unknown 事件（透传），解析失败返回 null
  */
@@ -62,7 +70,7 @@ export function normalize(msg: RawProtoMessage, meta: { roomId: string }): Danma
   if (!decoded) {
     // 未声明的消息类型：透传为 unknown，保留原始载荷供调试
     return {
-      id: msg.msgId || `${meta.roomId}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+      id: eventId(msg, undefined, meta.roomId),
       roomId: meta.roomId,
       platform: 'douyin',
       type: 'unknown',
@@ -75,7 +83,7 @@ export function normalize(msg: RawProtoMessage, meta: { roomId: string }): Danma
 
   const body = decoded.body;
   const base = {
-    id: msg.msgId || decoded.msgId,
+    id: eventId(msg, decoded.msgId, meta.roomId),
     roomId: meta.roomId,
     platform: 'douyin' as const,
     ts: createTime(body),

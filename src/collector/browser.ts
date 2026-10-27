@@ -10,24 +10,51 @@
  */
 
 import { chromium, type Browser, type BrowserContext, type Page, type CDPSession } from 'playwright-core';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import * as cookieStore from './cookieStore.js';
 
-const DEFAULT_CHROME_PATHS = [
-  // macOS
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  // Linux
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-  // Windows
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-];
-
-const FALLBACK_HEADLESS_SHELL =
-  process.env.HOME + '/Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell';
+/**
+ * 候选 Chrome 路径：三平台系统级安装位置 + Windows 用户级安装（LOCALAPPDATA，
+ * 普通用户默认装在这里，旧实现漏了这条）+ Playwright 缓存的 Chromium。
+ * 旧实现用 process.env.HOME 拼 ms-playwright 兜底，Windows 下 HOME 未定义，
+ * 得到 "undefined/..." 的无效路径。
+ */
+function chromeCandidates(): string[] {
+  const list = [
+    // macOS
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    // Linux
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+  ];
+  for (const root of [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA]) {
+    if (root) list.push(join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'));
+  }
+  const caches = [
+    process.env.PLAYWRIGHT_BROWSERS_PATH,
+    process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'ms-playwright') : '',
+    join(homedir(), '.cache', 'ms-playwright'),
+    join(homedir(), 'Library', 'Caches', 'ms-playwright'),
+  ].filter((dir): dir is string => Boolean(dir));
+  for (const cache of caches) {
+    try {
+      for (const entry of readdirSync(cache)) {
+        if (!entry.startsWith('chromium-')) continue;
+        if (process.platform === 'win32') list.push(join(cache, entry, 'chrome-win', 'chrome.exe'));
+        else if (process.platform === 'darwin')
+          list.push(join(cache, entry, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'));
+        else list.push(join(cache, entry, 'chrome-linux', 'chrome'));
+      }
+    } catch {
+      // 缓存目录不存在
+    }
+  }
+  return list;
+}
 
 export interface BrowserManagerOptions {
   /** Chrome 可执行文件路径，缺省时自动探测 */
@@ -62,61 +89,56 @@ export class BrowserManager {
   }
 
   private detectChrome(): string | undefined {
-    for (const p of DEFAULT_CHROME_PATHS) {
+    for (const p of chromeCandidates()) {
       try {
         if (existsSync(p)) return p;
       } catch {
-        /* ignore */
+        /* 路径非法则跳过 */
       }
-    }
-    // playwright 缓存的 headless shell 兜底
-    try {
-      if (existsSync(FALLBACK_HEADLESS_SHELL)) return FALLBACK_HEADLESS_SHELL;
-    } catch {
-      /* ignore */
     }
     return undefined;
   }
 
   async init(): Promise<void> {
-    if (this.pending) return this.pending;
+    // 有启动任务时先等它结束，再判断浏览器是否真的可用：
+    // 旧实现直接 return 已 resolve 的 pending，浏览器崩溃后永远走不到重建逻辑。
+    if (this.pending) await this.pending;
+    if (this.browser?.isConnected()) return;
+    this.browser = null;
+    this.context = null;
     this.pending = (async () => {
-      try {
-        // 浏览器实例已存在但意外断开（被外部 kill / 崩溃）→ 重置后重新拉起
-        if (this.browser && !this.browser.isConnected()) {
-          this.browser = null;
-          this.context = null;
-        }
-        if (this.browser) return;
-        const exec = this.opts.executablePath;
-        if (!exec) throw new Error('未找到 Chrome 可执行文件，请通过 executablePath 指定');
-        this.browser = await chromium.launch({
-          executablePath: exec,
-          headless: this.opts.headless,
-          args: [
-            '--disable-blink-features=AutomationControlled',
-            '--autoplay-policy=no-user-gesture-required',
-            '--no-sandbox',
-            '--disable-dev-shm-usage',
-            '--mute-audio',
-          ],
-        });
-        this.context = await this.browser.newContext({
-          userAgent: this.opts.userAgent,
-          viewport: { width: 1440, height: 900 },
-          locale: 'zh-CN',
-        });
-        // 抹除自动化痕迹
-        await this.context.addInitScript(() => {
-          Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        });
-      } catch (e) {
-        // 启动失败也要清掉 pending，允许下次重试
-        this.pending = null;
-        throw e;
-      }
+      const exec = this.opts.executablePath;
+      if (!exec) throw new Error('未找到 Chrome 可执行文件，请通过 DYHUB_CHROME 或 executablePath 指定');
+      this.browser = await chromium.launch({
+        executablePath: exec,
+        headless: this.opts.headless,
+        args: [
+          '--disable-blink-features=AutomationControlled',
+          '--autoplay-policy=no-user-gesture-required',
+          '--no-sandbox',
+          '--disable-dev-shm-usage',
+          '--mute-audio',
+        ],
+      });
+      this.context = await this.browser.newContext({
+        userAgent: this.opts.userAgent,
+        viewport: { width: 1440, height: 900 },
+        locale: 'zh-CN',
+      });
+      // 抹除自动化痕迹
+      await this.context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      });
     })();
-    await this.pending;
+    try {
+      await this.pending;
+    } catch (e) {
+      // 启动失败要清掉 pending，允许下次重试
+      this.pending = null;
+      this.browser = null;
+      this.context = null;
+      throw e;
+    }
   }
 
   /**

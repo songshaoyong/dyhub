@@ -5,10 +5,14 @@
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import { Collector } from '../collector/collector.js';
+import type { RoomSituation } from '../stats/roomSituation.js';
+import type { AudienceStore } from '../stats/audienceStore.js';
+import { livePullHeaders, resolveLivePull } from '../collector/liveStream.js';
 import * as cookieStore from '../collector/cookieStore.js';
 import { EventBus } from '../pipeline/eventBus.js';
 import { WebhookDispatcher } from '../dispatch/webhook.js';
@@ -36,6 +40,11 @@ export interface ApiDeps {
   wsClientCount: () => number;
   webhookDispatcher: WebhookDispatcher;
   startedAt: number;
+  /** 该房间是否写入观众库。缺省为上报。 */
+  isReporting?: (roomId: string) => boolean;
+  onRoomRemoved?: (roomId: string) => void;
+  situation?: RoomSituation;
+  getAudience?: () => AudienceStore | null;
 }
 
 export function buildApi(deps: ApiDeps): FastifyInstance {
@@ -76,6 +85,11 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
     }
     try {
       const info = await deps.collector.connect(roomId, { cookie: cookie?.trim() || undefined });
+      try {
+        await deps.getAudience?.()?.ensureTodayLast(roomId);
+      } catch (err) {
+        console.error('[dyhub] 场次选择失败:', err instanceof Error ? err.message : err);
+      }
       return { ok: true, room: info };
     } catch (e: any) {
       return reply.code(500).send({ error: `连接失败: ${e?.message ?? e}` });
@@ -91,6 +105,7 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   app.delete('/api/rooms/:roomId', async (req, reply) => {
     const roomId = normalizeRoomIdInput((req.params as { roomId: string }).roomId);
     await deps.collector.removeRoom(roomId);
+    deps.onRoomRemoved?.(roomId);
     return { ok: true };
   });
 
@@ -99,6 +114,121 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
     const info = deps.collector.getRoomInfo(roomId);
     if (!info) return reply.code(404).send({ error: '房间未连接' });
     return { room: info };
+  });
+
+  // 转写写入时附带：在线、互动计数，以及当前画面。image=1 才截图。
+  app.get('/api/rooms/:roomId/situation', async (req, reply) => {
+    const origin = String(req.headers.origin ?? '');
+    if (origin === 'http://127.0.0.1:8765' || origin === 'http://localhost:8765') {
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Vary', 'Origin');
+    }
+    const roomId = normalizeRoomIdInput((req.params as { roomId: string }).roomId);
+    if (!roomId) return reply.code(400).send({ error: 'roomId 无效' });
+    const info = deps.collector.getRoomInfo(roomId);
+    const live = deps.situation?.get(roomId);
+    const session = await deps.getAudience?.()?.sessionTotals(roomId);
+    const wantImage = String((req.query as { image?: string }).image ?? '') === '1';
+    let image: string | undefined;
+    if (wantImage) {
+      const shot = await deps.collector.screenshot(roomId);
+      if (shot) image = shot.toString('base64');
+    }
+    return {
+      roomId,
+      at: Date.now(),
+      startedAt: info?.startedAt ?? null,
+      sessionId: session?.id ?? null,
+      sessionDate: session?.sessionDate ?? null,
+      sessionNo: session?.sessionNo ?? null,
+      sessionStartedAt: session?.startedAt ?? null,
+      nickname: info?.meta?.nickname ?? '',
+      title: info?.meta?.title ?? '',
+      online: live?.online ?? null,
+      totalUser: live?.totalUser ?? null,
+      popularity: live?.popularity ?? null,
+      chat: session?.chat ?? live?.chat ?? 0,
+      gift: session?.gift ?? live?.gift ?? 0,
+      like: session?.like ?? live?.like ?? 0,
+      follow: session?.follow ?? live?.follow ?? 0,
+      member: session?.member ?? live?.member ?? 0,
+      image,
+    };
+  });
+
+  app.get('/api/rooms/:roomId/sessions', async (req, reply) => {
+    const roomId = normalizeRoomIdInput((req.params as { roomId: string }).roomId);
+    if (!roomId) return reply.code(400).send({ error: 'roomId 无效' });
+    const audience = deps.getAudience?.();
+    if (!audience) return { activeId: null, sessions: [] };
+    return audience.listSessions(roomId);
+  });
+
+  app.post('/api/rooms/:roomId/sessions', async (req, reply) => {
+    const roomId = normalizeRoomIdInput((req.params as { roomId: string }).roomId);
+    if (!roomId) return reply.code(400).send({ error: 'roomId 无效' });
+    const audience = deps.getAudience?.();
+    if (!audience) return reply.code(503).send({ error: '观众库未连接，不能新建场次' });
+    const created = await audience.createNextSession(roomId);
+    return { ok: true, session: created };
+  });
+
+  app.post('/api/rooms/:roomId/session', async (req, reply) => {
+    const roomId = normalizeRoomIdInput((req.params as { roomId: string }).roomId);
+    if (!roomId) return reply.code(400).send({ error: 'roomId 无效' });
+    const sessionId = Number((req.body as { sessionId?: unknown } | undefined)?.sessionId);
+    if (!Number.isInteger(sessionId) || sessionId <= 0) return reply.code(400).send({ error: 'sessionId 无效' });
+    const audience = deps.getAudience?.();
+    if (!audience) return reply.code(503).send({ error: '观众库未连接' });
+    const selected = await audience.selectSession(roomId, sessionId);
+    if (!selected) return reply.code(404).send({ error: '场次不存在' });
+    return { ok: true, session: selected };
+  });
+
+  // 直播画面：解析拉流地址后由本机转发，浏览器才能同时拿到画面和声音
+  app.get('/api/rooms/:roomId/live.flv', async (req, reply) => {
+    const roomId = normalizeRoomIdInput((req.params as { roomId: string }).roomId);
+    if (!roomId) return reply.code(400).send({ error: 'roomId 无效' });
+    const pull = await resolveLivePull(roomId);
+    if (!pull?.flv) return reply.code(404).send({ error: '当前没有可播放的直播画面' });
+
+    const ac = new AbortController();
+    let upstream: Response;
+    try {
+      upstream = await fetch(pull.flv, { headers: livePullHeaders(roomId), signal: ac.signal });
+    } catch (e) {
+      if (ac.signal.aborted) return reply.code(499).send();
+      return reply.code(502).send({ error: `直播画面拉取失败: ${(e as Error).message}` });
+    }
+    if (!upstream.ok || !upstream.body) {
+      return reply.code(502).send({ error: `直播画面不可用（${upstream.status}）` });
+    }
+    const stream = Readable.fromWeb(upstream.body as unknown as import('node:stream/web').ReadableStream);
+    // 上游中断（CDN 掐流 / 客户端断开后 abort）会让这条流报错。
+    // 不挂 error 监听时 Node 会把它抛成未捕获异常，直接把整个中台进程带走。
+    stream.on('error', (err) => {
+      console.warn(`[dyhub] 直播流中断 ${roomId}:`, (err as Error)?.message ?? err);
+      try {
+        ac.abort();
+      } catch {
+        /* ignore */
+      }
+    });
+    reply.raw.on('error', () => {
+      try {
+        ac.abort();
+      } catch {
+        /* ignore */
+      }
+      stream.destroy();
+    });
+    reply.raw.on('close', () => {
+      ac.abort();
+      stream.destroy();
+    });
+    reply.header('Content-Type', 'video/x-flv');
+    reply.header('Cache-Control', 'no-cache, no-store');
+    return reply.send(stream);
   });
 
   // ---- 每房间独立 Cookie（多账号多房间互不干扰）----
@@ -166,18 +296,38 @@ export function buildApi(deps: ApiDeps): FastifyInstance {
   });
 
   // ---- 统计 ----
-  app.get('/api/stats', async () => ({
-    uptimeSec: Math.floor((Date.now() - deps.startedAt) / 1000),
-    bus: deps.bus.stats(),
-    wsClients: deps.wsClientCount(),
-    webhooks: deps.webhookDispatcher.stats(),
-    rooms: deps.collector.getRooms().map((r) => ({
-      roomId: r.roomId,
-      status: r.status,
-      msgCount: r.stats.msgCount,
-      meta: r.meta ?? null,
-    })),
-  }));
+  app.get('/api/stats', async () => {
+    const rooms = deps.collector.getRooms();
+    const audience = deps.getAudience?.() ?? null;
+    const sessionByRoom = new Map<string, Awaited<ReturnType<AudienceStore['listSessions']>>>();
+    const tallyByRoom = new Map<string, Awaited<ReturnType<AudienceStore['sessionTotals']>>>();
+    if (audience) {
+      await Promise.all(rooms.map(async (room) => {
+        const [sessions, tally] = await Promise.all([
+          audience.listSessions(room.roomId),
+          audience.sessionTotals(room.roomId),
+        ]);
+        sessionByRoom.set(room.roomId, sessions);
+        tallyByRoom.set(room.roomId, tally);
+      }));
+    }
+    return {
+      uptimeSec: Math.floor((Date.now() - deps.startedAt) / 1000),
+      bus: deps.bus.stats(),
+      wsClients: deps.wsClientCount(),
+      webhooks: deps.webhookDispatcher.stats(),
+      rooms: rooms.map((r) => ({
+        roomId: r.roomId,
+        status: r.status,
+        msgCount: r.stats.msgCount,
+        meta: r.meta ?? null,
+        hasOwnCookie: r.hasOwnCookie ?? false,
+        reporting: deps.isReporting ? deps.isReporting(r.roomId) : true,
+        sessions: sessionByRoom.get(r.roomId) ?? null,
+        tally: tallyByRoom.get(r.roomId) ?? null,
+      })),
+    };
+  });
 
   // ---- SSE 实时事件（/api/events?roomId=&types=chat,gift）----
   registerSseRoute(app, deps.bus, deps.collector);

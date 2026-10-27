@@ -34,8 +34,10 @@ export class WsDispatcher {
       ws.on('error', () => this.clients.delete(ws));
       ws.send(JSON.stringify({ type: '__hello', roomId, types, ts: Date.now() }));
 
-      // 订阅者接入即连接：房间未活跃时自动触发采集，并向客户端推送连接进度
-      if (roomId) this.autoConnectRoom(ws, roomId);
+      // 订阅者接入即连接：房间未活跃时自动触发采集，并向客户端推送连接进度。
+      // autoconnect=0 只订阅，不替客户端打开直播间。
+      const autoconnect = url.searchParams.get('autoconnect') !== '0';
+      if (roomId && autoconnect) this.autoConnectRoom(ws, roomId);
     });
     // 心跳保活
     const hb = setInterval(() => {
