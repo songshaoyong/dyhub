@@ -138,7 +138,7 @@ async function main() {
     situation,
     getAudience: () => audience,
   });
-  wsDispatcher = new WsDispatcher(app.server, bus, collector);
+  wsDispatcher = new WsDispatcher(app.server, bus, collector, situation);
 
   try {
     audience = await startAudienceStore();

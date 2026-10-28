@@ -6,6 +6,8 @@
  * 仅供展示，取不到时返回 null，不影响采集主链路。
  */
 
+import * as cookieStore from './cookieStore.js';
+
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0';
 
@@ -75,6 +77,8 @@ let jarAt = 0;
 const JAR_TTL_MS = 15 * 60_000;
 /** cookie 获取失败时的短缓存（抖音间歇限流，短 TTL 允许快速重试） */
 const JAR_FAIL_TTL_MS = 30_000;
+/** 上次构建 jar 所用的运行时 cookie 串，用于检测 Dashboard 是否更新过 cookie */
+let jarSource = '';
 
 function cookieStr(): string {
   return jar ? [...jar].map(([k, v]) => `${k}=${v}`).join('; ') : '';
@@ -90,7 +94,22 @@ function storeCookies(headers: Headers) {
 }
 
 async function ensureCookies(): Promise<void> {
-  if (jar && Date.now() - jarAt < JAR_TTL_MS) return;
+  // 运行时 cookie（Dashboard 填写 / DYHUB_COOKIE / data/cookie.json）优先：
+  // 那是用户过掉验证码后的真实浏览器凭据（含 ttwid / s_v_web_id），
+  // 比本模块自己跑 cookie 链拿到的更容易通过风控。
+  const runtime = cookieStore.getCookieStr();
+  if (runtime) {
+    if (runtime !== jarSource) {
+      jar = new Map(cookieStore.getCookieMap());
+      jarSource = runtime;
+      jarAt = Date.now();
+    }
+    return;
+  }
+  // 只有 cookie 链拿到的 jar 才吃 TTL 缓存；jarSource 非空说明缓存来自运行时 cookie，
+  // 此刻运行时 cookie 已被清空，必须重建，不能继续沿用旧凭据。
+  if (jar && !jarSource && Date.now() - jarAt < JAR_TTL_MS) return;
+  jarSource = '';
   const H = { 'User-Agent': UA, Accept: 'text/html,*/*;q=0.8', 'Accept-Language': 'zh-CN,zh;q=0.9' };
   jar = new Map();
   jarAt = Date.now();

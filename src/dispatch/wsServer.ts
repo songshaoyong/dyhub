@@ -10,17 +10,20 @@ import type { Server as HttpServer } from 'node:http';
 import { EventBus } from '../pipeline/eventBus.js';
 import { eventMatches, type DanmakuEvent, type EventFilter } from '../types/events.js';
 import type { Collector, RoomInfo } from '../collector/collector.js';
+import type { RoomSituation } from '../stats/roomSituation.js';
 
 export class WsDispatcher {
   private wss: WebSocketServer;
   private bus: EventBus;
   private collector: Collector;
+  private situation?: RoomSituation;
   private clients = new Map<WebSocket, EventFilter>();
   private busSub: number;
 
-  constructor(httpServer: HttpServer, bus: EventBus, collector: Collector) {
+  constructor(httpServer: HttpServer, bus: EventBus, collector: Collector, situation?: RoomSituation) {
     this.bus = bus;
     this.collector = collector;
+    this.situation = situation;
     this.wss = new WebSocketServer({ server: httpServer, path: '/ws' });
     this.wss.on('connection', (ws, req) => {
       const url = new URL(req.url ?? '/', 'http://localhost');
@@ -62,13 +65,27 @@ export class WsDispatcher {
     };
     const info = this.collector.getRoomInfo(roomId);
     if (info && info.status !== 'stopped') {
-      send({ type: '__connected', roomId, room: info, ts: Date.now() });
+      send({
+        type: '__connected',
+        roomId,
+        room: info,
+        situation: this.situation?.get(roomId) ?? null,
+        ts: Date.now(),
+      });
       return;
     }
     send({ type: '__connecting', roomId, ts: Date.now() });
     this.collector
       .connect(roomId)
-      .then((room: RoomInfo) => send({ type: '__connected', roomId, room, ts: Date.now() }))
+      .then((room: RoomInfo) =>
+        send({
+          type: '__connected',
+          roomId,
+          room,
+          situation: this.situation?.get(roomId) ?? null,
+          ts: Date.now(),
+        }),
+      )
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
         send({ type: '__error', roomId, error: `房间自动连接失败: ${msg}`, ts: Date.now() });
